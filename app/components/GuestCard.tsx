@@ -54,8 +54,8 @@ export function GuestCard({ guest, onCheckIn, onRemove }: GuestCardProps) {
             </span>
             {guest.vip && (
               <div className="flex items-center gap-1 px-2 py-1 bg-[var(--gold)] bg-opacity-10 rounded-sm">
-                <CrownIcon className="w-3 h-3 text-[var(--gold)]" />
-                <span className="text-[10px] uppercase tracking-wider text-[var(--gold)] font-medium">
+                <CrownIcon className="w-3 h-3 text-[var(--white)]" />
+                <span className="text-[10px] uppercase tracking-wider text-[var(--white)] font-medium">
                   VIP
                 </span>
               </div>

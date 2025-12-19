@@ -12,7 +12,10 @@ import {
   FileUpload,
   SearchBar,
   AddGuestModal,
+  Pagination,
 } from "./components";
+
+const GUESTS_PER_PAGE = 10;
 
 export default function Home() {
   const {
@@ -27,6 +30,7 @@ export default function Home() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.target;
@@ -88,9 +92,18 @@ export default function Home() {
     addGuest(guest);
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
   const filteredGuests = guests.filter((guest) =>
     guest.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalPages = Math.ceil(filteredGuests.length / GUESTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * GUESTS_PER_PAGE;
+  const paginatedGuests = filteredGuests.slice(startIndex, startIndex + GUESTS_PER_PAGE);
 
   const checkedInCount = guests.filter((g) => g.checkedIn).length;
   const vipCount = guests.filter((g) => g.vip).length;
@@ -162,7 +175,7 @@ export default function Home() {
           <div className="bg-[var(--surface)] rounded-sm border border-[var(--border)]">
             {/* Search Header */}
             <div className="p-6 border-b border-[var(--border)]">
-              <SearchBar value={searchQuery} onChange={setSearchQuery} />
+              <SearchBar value={searchQuery} onChange={handleSearchChange} />
             </div>
 
             {/* Guest List */}
@@ -172,16 +185,28 @@ export default function Home() {
                   <p className="text-xl italic">No guests found</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {filteredGuests.map((guest) => (
-                    <GuestCard
-                      key={guest.id}
-                      guest={guest}
-                      onCheckIn={toggleCheckIn}
-                      onRemove={removeGuest}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-3">
+                    {paginatedGuests.map((guest) => (
+                      <GuestCard
+                        key={guest.id}
+                        guest={guest}
+                        onCheckIn={toggleCheckIn}
+                        onRemove={removeGuest}
+                      />
+                    ))}
+                  </div>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                  {filteredGuests.length > GUESTS_PER_PAGE && (
+                    <p className="text-center text-xs text-[var(--muted)] mt-4">
+                      Showing {startIndex + 1}-{Math.min(startIndex + GUESTS_PER_PAGE, filteredGuests.length)} of {filteredGuests.length} guests
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
