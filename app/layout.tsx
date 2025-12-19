@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Royal Wedding Registry | Victoria & Alexander",
+  title: "Royal Wedding Registry | Angel & Nelson",
   description: "Official guest registry for the royal wedding celebration",
 };
 
