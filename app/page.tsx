@@ -21,6 +21,7 @@ export default function Home() {
   const {
     guests,
     initialized,
+    loading,
     error,
     addGuest,
     addGuests,
@@ -108,10 +109,13 @@ export default function Home() {
   const checkedInCount = guests.filter((g) => g.checkedIn).length;
   const vipCount = guests.filter((g) => g.vip).length;
 
-  if (!initialized) {
+  if (!initialized || loading) {
     return (
       <main className="min-h-screen bg-[var(--background)] flex items-center justify-center">
-        <p className="text-[var(--muted)]">Loading...</p>
+        <div className="text-center">
+          <CrownIcon className="w-12 h-12 text-[var(--gold)] mx-auto mb-4 animate-pulse" />
+          <p className="text-[var(--muted)]">Loading guest registry...</p>
+        </div>
       </main>
     );
   }

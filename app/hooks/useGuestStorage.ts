@@ -1,105 +1,160 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../lib/supabase";
 import { Guest } from "../types/guest";
+import { GuestRow } from "../types/database";
 
-const STORAGE_KEY = "guestList";
-
-const defaultGuests: Guest[] = [
-  { id: 1, name: "Lady Sarah Montgomery", table: "1", checkedIn: true, vip: true },
-  { id: 2, name: "Mr. Michael Chen", table: "2", checkedIn: false, vip: false },
-  { id: 3, name: "Countess Emily Davis", table: "1", checkedIn: false, vip: true },
-  { id: 4, name: "Lord James Wilson", table: "3", checkedIn: true, vip: true },
-  { id: 5, name: "Ms. Olivia Brown", table: "2", checkedIn: false, vip: false },
-  { id: 6, name: "Duke of Cambridge", table: "1", checkedIn: false, vip: true },
-];
-
-function isValidGuest(g: unknown): g is Guest {
-  return (
-    typeof g === "object" &&
-    g !== null &&
-    "id" in g &&
-    "name" in g &&
-    "table" in g &&
-    "checkedIn" in g &&
-    "vip" in g &&
-    typeof (g as Guest).id === "number" &&
-    typeof (g as Guest).name === "string" &&
-    typeof (g as Guest).table === "string" &&
-    typeof (g as Guest).checkedIn === "boolean" &&
-    typeof (g as Guest).vip === "boolean"
-  );
+function mapRowToGuest(row: GuestRow): Guest {
+  return {
+    id: row.id,
+    name: row.name,
+    table: row.table_number,
+    checkedIn: row.checked_in,
+    vip: row.vip,
+  };
 }
 
 export function useGuestStorage() {
-  const [guests, setGuests] = useState<Guest[]>(defaultGuests);
+  const [guests, setGuests] = useState<Guest[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load guests from localStorage on mount
+  // Fetch guests from Supabase on mount
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.every(isValidGuest)) {
-          setGuests(parsed);
+    async function fetchGuests() {
+      try {
+        setLoading(true);
+        const { data, error: fetchError } = await supabase
+          .from("guests")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (fetchError) {
+          throw fetchError;
         }
+
+        setGuests(data?.map(mapRowToGuest) || []);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch guests:", err);
+        setError("Failed to load guest list");
+      } finally {
+        setLoading(false);
+        setInitialized(true);
       }
-    } catch (err) {
-      console.error("Failed to load guest list from storage:", err);
-      setError("Failed to load saved guest list");
-    } finally {
-      setInitialized(true);
     }
+
+    fetchGuests();
   }, []);
 
-  // Persist guests to localStorage on any change after initialization
-  useEffect(() => {
-    if (!initialized) return;
+  const addGuest = useCallback(async (guest: Omit<Guest, "id" | "checkedIn">) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(guests));
+      const { data, error: insertError } = await supabase
+        .from("guests")
+        .insert({
+          name: guest.name,
+          table_number: guest.table,
+          checked_in: false,
+          vip: guest.vip,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      if (data) {
+        setGuests((prev) => [...prev, mapRowToGuest(data)]);
+      }
       setError(null);
     } catch (err) {
-      console.error("Failed to save guest list to storage:", err);
-      setError("Failed to save guest list");
+      console.error("Failed to add guest:", err);
+      setError("Failed to add guest");
     }
-  }, [guests, initialized]);
+  }, []);
 
-  const getNextId = useCallback(() => {
-    return guests.reduce((max, g) => Math.max(max, g.id), 0) + 1;
+  const addGuests = useCallback(async (newGuests: Omit<Guest, "id">[]) => {
+    try {
+      const guestsToInsert = newGuests.map((g) => ({
+        name: g.name,
+        table_number: g.table,
+        checked_in: g.checkedIn,
+        vip: g.vip,
+      }));
+
+      const { data, error: insertError } = await supabase
+        .from("guests")
+        .insert(guestsToInsert)
+        .select();
+
+      if (insertError) throw insertError;
+
+      if (data) {
+        setGuests((prev) => [...prev, ...data.map(mapRowToGuest)]);
+      }
+      setError(null);
+    } catch (err) {
+      console.error("Failed to add guests:", err);
+      setError("Failed to import guests");
+    }
+  }, []);
+
+  const removeGuest = useCallback(async (id: number) => {
+    // Optimistic update
+    const previousGuests = guests;
+    setGuests((prev) => prev.filter((g) => g.id !== id));
+
+    try {
+      const { error: deleteError } = await supabase
+        .from("guests")
+        .delete()
+        .eq("id", id);
+
+      if (deleteError) throw deleteError;
+      setError(null);
+    } catch (err) {
+      console.error("Failed to remove guest:", err);
+      setError("Failed to remove guest");
+      // Rollback on error
+      setGuests(previousGuests);
+    }
   }, [guests]);
 
-  const addGuest = useCallback((guest: Omit<Guest, "id" | "checkedIn">) => {
-    setGuests((prev) => [
-      ...prev,
-      { ...guest, id: prev.reduce((max, g) => Math.max(max, g.id), 0) + 1, checkedIn: false },
-    ]);
-  }, []);
+  const toggleCheckIn = useCallback(async (id: number) => {
+    const guest = guests.find((g) => g.id === id);
+    if (!guest) return;
 
-  const addGuests = useCallback((newGuests: Omit<Guest, "id">[]) => {
-    setGuests((prev) => {
-      let nextId = prev.reduce((max, g) => Math.max(max, g.id), 0) + 1;
-      const guestsWithIds = newGuests.map((g) => ({ ...g, id: nextId++ }));
-      return [...prev, ...guestsWithIds];
-    });
-  }, []);
+    const newCheckedIn = !guest.checkedIn;
 
-  const removeGuest = useCallback((id: number) => {
-    setGuests((prev) => prev.filter((g) => g.id !== id));
-  }, []);
-
-  const toggleCheckIn = useCallback((id: number) => {
+    // Optimistic update
     setGuests((prev) =>
-      prev.map((g) => (g.id === id ? { ...g, checkedIn: !g.checkedIn } : g))
+      prev.map((g) => (g.id === id ? { ...g, checkedIn: newCheckedIn } : g))
     );
-  }, []);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("guests")
+        .update({ checked_in: newCheckedIn, updated_at: new Date().toISOString() })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+      setError(null);
+    } catch (err) {
+      console.error("Failed to update check-in status:", err);
+      setError("Failed to update guest");
+      // Rollback on error
+      setGuests((prev) =>
+        prev.map((g) => (g.id === id ? { ...g, checkedIn: !newCheckedIn } : g))
+      );
+    }
+  }, [guests]);
 
   return {
     guests,
     initialized,
+    loading,
     error,
-    getNextId,
     addGuest,
     addGuests,
     removeGuest,
